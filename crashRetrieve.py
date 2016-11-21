@@ -29,7 +29,7 @@ crashes = json.loads(list.text)
 # Loop over list and get crash details for each
 for crash in crashes:
     crashId = crash['crashId']
-    reqJSON = '{"applicationId":66,"platform":"iOS","mobileAppId":30,"timeRangeString":"last_15_minutes|BEFORE_NOW|-1|-1|15","crashId":"' + crashId + '"}'
+    reqJSON = '{"applicationId":' + appId + ',"platform":"' + platform + '","mobileAppId":' + mobileAppId + ',"timeRangeString":"last_15_minutes|BEFORE_NOW|-1|-1|15","crashId":"' + crashId + '"}'
     crashResp = session.post(controller + 'controller/restui/crashDetails/detailsAndSummaryData', data=reqJSON)
     crashDetails = json.loads(crashResp.text)
     # Print out the crash data
