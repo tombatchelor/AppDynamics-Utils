@@ -3,14 +3,14 @@ import requests
 import json
 
 # Variable, update to match your environment
-username = 'demouser'
+username = ''
 password = ''
-customerName = 'customer1'
-controller = 'http://demo1.appdynamics.com/'
+customerName = ''
+controller = ''
 
 # Mobile app details, can be found in the URL when looking at mobile data
-appId = '66'
-mobileAppId = '30'
+appId = ''
+mobileAppId = ''
 platform = 'iOS'
 
 # Login to controller and setup session
