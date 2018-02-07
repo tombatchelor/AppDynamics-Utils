@@ -7,7 +7,9 @@ import time
 def getNodeIdList(nodes):
     nodeList = []
     for node in nodes:
-         nodeList.append(node['id'])
+        # Only get APP_AGENT Nodes right now
+        if node['agentType'] == 'APP_AGENT':
+            nodeList.append(node['id'])
     return nodeList
 
 def getListOfAvailableNodes(nodeStatus):
@@ -25,6 +27,23 @@ def lastDayMillis():
     lastDay = currTime - (1000 * 60 * 60 * 24)
     return currTime - lastDay
 
+def isPCF(node):
+    for option in node['metaData']['latestVmStartupOptions']:
+        if 'javaagent' in option:
+            if 'bwce' in option:
+                return True
+            else:
+                return False
+    return False
+
+def isTibcoCE(node):
+    for option in node['metaData']['latestVmStartupOptions']:
+        if 'wrapper.tra.file' in option:
+            if 'buildpack' in option:
+                return True
+            else:
+                return False
+    return False
 nodeListQuery = {"requestFilter":[1647,1650,1658,1659,1648,1649,1657,1660,1646,1644],
     "resultColumns":["HEALTH","APP_AGENT_STATUS","APP_AGENT_VERSION","LAST_APP_SERVER_RESTART_TIME","MACHINE_AGENT_STATUS","VM_RUNTIME_VERSION"],
     "offset":0,
@@ -60,7 +79,11 @@ response = requests.get(controller + 'controller/rest/applications?output=JSON',
 apps = json.loads(response.text)
 
 #Get nodes for each app and meta data
+counter = 0
 for app in apps:
+    if counter > 5:
+        break
+    counter += 1
     response = requests.get(controller + 'controller/rest/applications/' + str(app['id']) + '/nodes?output=JSON', auth=basicAuth)
     nodes = json.loads(response.text)
     nodeList = getNodeIdList(nodes)
@@ -70,6 +93,8 @@ for app in apps:
         nodeListQuery['timeRangeEnd'] = currentTimeMillis()
         postData = json.dumps(nodeListQuery).replace(' ','')
         response = requests.post(controller + 'controller/restui/nodes/list/health/ids', data=postData, cookies=cookies, headers=headers)
+        print(response)
+        print(response.text)
         nodeList = getListOfAvailableNodes(json.loads(response.text))
         # Create new nodes list of just avialable nodes
         newNodeList = []
@@ -92,4 +117,20 @@ for app in apps:
         newAppList.append(app)
 
 apps = newAppList
+# apps is not a list of apps with Java agent and the agent meta data
+
+# Get the split of differnt types of Java agent
+for app in apps:
+    app['fullJava'] = 0
+    app['pcfNode'] = 0
+    app['tibcoCE'] = 0
+    for node in app['nodes']:
+        if isPCF(node):
+            app['pcfNode'] += 1
+        elif isTibcoCE(node):
+            app['tibcoCE'] += 1
+        else:
+            app['fullJava'] += 1
+
 print(json.dumps(apps))
+
