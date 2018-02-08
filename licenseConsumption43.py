@@ -8,7 +8,7 @@ import sys
 def getNodeIdList(nodes):
     nodeList = []
     for node in nodes:
-        # Only get APP_AGENT Nodes right now
+        # Only get APP_AGENT Nodes right now, these are Java
         if node['agentType'] == 'APP_AGENT':
             nodeList.append(node['id'])
     return nodeList
@@ -38,6 +38,19 @@ def isTibcoCE(node):
         return True
     return False
 
+def chunkNodeList(nodeList):
+    if len(nodeList) < 50:
+        return [nodeList]
+    tempList = []
+    chunks = []
+    for node in nodeList:
+        tempList.append(node)
+        if len(tempList) == 50:
+            chunks.append(tempList)
+            tempList = []
+    chunks.append(tempList)
+    return chunks
+
 # Variables, update to match your environment
 username = ''
 password = ''
@@ -61,18 +74,21 @@ response = requests.get(controller + 'controller/rest/applications?output=JSON',
 apps = json.loads(response.text)
 
 #Get nodes for each app and meta data
-appCounter = 0
 for app in apps:
-    if appCounter > 5:
-        break
-    appCounter += 1
+    print('Getting data for app - ' + app['name'])
     response = requests.get(controller + 'controller/rest/applications/' + str(app['id']) + '/nodes?output=JSON', auth=basicAuth)
     nodes = json.loads(response.text)
     nodeList = getNodeIdList(nodes)
     if len(nodeList) > 0:
-        nodeListQuery = str(nodeList).replace(' ','')
-        response = requests.post(controller + 'controller/restui/appInfra/healthStatsForNodes?time-range=last_15_minutes.BEFORE_NOW.-1.-1.15', data=nodeListQuery, cookies=cookies, headers=headers)
-        nodeList = getListOfAvailableNodes(json.loads(response.text))
+        # Chunk getting availability data for apps over 50 nodes
+        nodeListChunks = chunkNodeList(nodeList)
+        availabilityData = []
+        print('Getting availability data for node count - ' + str(len(nodeList)) + ' and chunk count - ' + str(len(nodeListChunks)))
+        for chunk in nodeListChunks:
+            nodeListQuery = str(chunk).replace(' ','')
+            response = requests.post(controller + 'controller/restui/appInfra/healthStatsForNodes?time-range=last_15_minutes.BEFORE_NOW.-1.-1.15', data=nodeListQuery, cookies=cookies, headers=headers)
+            availabilityData = availabilityData + json.loads(response.text)
+        nodeList = getListOfAvailableNodes(availabilityData)
         # Create new nodes list of just avialable nodes
         newNodeList = []
         for node in nodes:
@@ -81,15 +97,20 @@ for app in apps:
         nodes = newNodeList
         app['nodes'] = nodes
         # Get node meta-data
+        print('Getting node data for node count - ' + str(len(nodes)))
         nodeCounter = 0
         for node in nodes:
             if nodeCounter % 10 == 0:
                 # Pause each 10 nodes
                 time.sleep(2)
-            response = requests.get(controller + 'controller/restui/nodeUiService/node/' + str(node['id']),  cookies=cookies, headers=headers)
-            if response.ok and len(response.text) > 0:
-                metaData = json.loads(response.text)
-                node['metaData'] = metaData
+            try:
+                response = requests.get(controller + 'controller/restui/nodeUiService/node/' + str(node['id']),  cookies=cookies, headers=headers)
+                if response.ok and len(response.text) > 0:
+                    metaData = json.loads(response.text)
+                    node['metaData'] = metaData
+            except:
+                print("Unexpected error:", sys.exc_info()[0])
+                time.sleep(10)
             nodeCounter += 1
     # Pause between apps
     time.sleep(5)
@@ -100,10 +121,11 @@ for app in apps:
     if 'nodes' in app:
         newAppList.append(app)
 
-apps = newAppList
 # apps is now a list of apps with Java agent and the agent meta data
+apps = newAppList
 
-# Get the split of differnt types of Java agent
+
+# Get the split of different types of Java agent
 for app in apps:
     app['fullJava'] = 0
     app['pcfNode'] = 0
