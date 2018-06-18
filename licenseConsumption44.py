@@ -1,3 +1,4 @@
+
 # Script to get recent crash data from AppDynamics
 import requests
 from requests.auth import HTTPBasicAuth
@@ -14,7 +15,7 @@ def getNodeIdList(nodes):
 
 def getListOfAvailableNodes(nodeStatus):
     nodeList = []
-    for node in nodeStatus['data']:
+    for node in nodeStatus:
         if node['healthMetricStats']['appServerAgentAvailability']['percentage'] > 0.0:
             nodeList.append(node['nodeId'])
     return nodeList
@@ -44,6 +45,20 @@ def isTibcoCE(node):
             else:
                 return False
     return False
+
+def chunkNodeList(nodeList):
+    if len(nodeList) < 50:
+        return [nodeList]
+    tempList = []
+    chunks = []
+    for node in nodeList:
+        tempList.append(node)
+        if len(tempList) == 50:
+            chunks.append(tempList)
+            tempList = []
+    chunks.append(tempList)
+    return chunks
+
 nodeListQuery = {"requestFilter":[1647,1650,1658,1659,1648,1649,1657,1660,1646,1644],
     "resultColumns":["HEALTH","APP_AGENT_STATUS","APP_AGENT_VERSION","LAST_APP_SERVER_RESTART_TIME","MACHINE_AGENT_STATUS","VM_RUNTIME_VERSION"],
     "offset":0,
@@ -79,23 +94,28 @@ response = requests.get(controller + 'controller/rest/applications?output=JSON',
 apps = json.loads(response.text)
 
 #Get nodes for each app and meta data
-counter = 0
+#counter = 0
 for app in apps:
-    if counter > 5:
-        break
-    counter += 1
+    #if counter > 20:
+    #    break
+    #counter += 1
+    print('Getting data for: ' + app['name'])
     response = requests.get(controller + 'controller/rest/applications/' + str(app['id']) + '/nodes?output=JSON', auth=basicAuth)
     nodes = json.loads(response.text)
     nodeList = getNodeIdList(nodes)
     if len(nodeList) > 0:
-        nodeListQuery['requestFilter'] = nodeList
-        nodeListQuery['timeRangeStart'] = lastDayMillis()
-        nodeListQuery['timeRangeEnd'] = currentTimeMillis()
-        postData = json.dumps(nodeListQuery).replace(' ','')
-        response = requests.post(controller + 'controller/restui/nodes/list/health/ids', data=postData, cookies=cookies, headers=headers)
-        print(response)
-        print(response.text)
-        nodeList = getListOfAvailableNodes(json.loads(response.text))
+        # Chunk getting availability data for apps over 50 nodes
+        nodeListChunks = chunkNodeList(nodeList)
+        availabilityData = []
+        print('Getting availability data for node count - ' + str(len(nodeList)) + ' and chunk count - ' + str(len(nodeListChunks)))
+        for chunk in nodeListChunks:
+            nodeListQuery['requestFilter'] = chunk
+            nodeListQuery['timeRangeStart'] = lastDayMillis()
+            nodeListQuery['timeRangeEnd'] = currentTimeMillis()
+            postData = json.dumps(nodeListQuery).replace(' ','')
+            response = requests.post(controller + 'controller/restui/nodes/list/health/ids?output=JSON', data=postData, cookies=cookies, headers=headers)
+            availabilityData = availabilityData + json.loads(response.text)['data']
+        nodeList = getListOfAvailableNodes(availabilityData)
         # Create new nodes list of just avialable nodes
         newNodeList = []
         for node in nodes:
@@ -104,11 +124,24 @@ for app in apps:
         nodes = newNodeList
         app['nodes'] = nodes
         # Get node meta-data
+        print('Getting meta data for node count: ' + str(len(nodes)))
+        nodeCounter = 0
         for node in nodes:
-            response = requests.get(controller + 'controller/restui/nodeUiService/appAgentByNodeId/' + str(node['id']),  cookies=cookies, headers=headers)
-            if response.ok and len(response.text) > 0:
-                metaData = json.loads(response.text)
-                node['metaData'] = metaData
+            if nodeCounter % 10 == 0:
+                # Pause each 10 nodes
+                time.sleep(2)
+            try:
+                response = requests.get(controller + 'controller/restui/nodeUiService/appAgentByNodeId/' + str(node['id']),  cookies=cookies, headers=headers)
+                if response.ok and len(response.text) > 0:
+                    metaData = json.loads(response.text)
+                    node['metaData'] = metaData
+            except:
+                print("Unexpected error:", sys.exc_info()[0])
+                time.sleep(10)
+            nodeCounter += 1
+    # Pause between apps
+    time.sleep(5)
+
 
 # Remove apps with no available nodes
 newAppList = []
@@ -132,5 +165,19 @@ for app in apps:
         else:
             app['fullJava'] += 1
 
-print(json.dumps(apps))
+# Output Json
+jsonRecord = open('json-dump.json','w')
+jsonRecord.write(json.dumps(apps))
+
+#Output CSV
+csvOutput = open('java-license.csv','w')
+csvOutput.write('App Name, Full Java, PCF Java, Tibco Java\n')
+for app in apps:
+    csvOutput.write(
+                    app['name'] + ',' +
+                    str(app['fullJava']) + ',' +
+                    str(app['pcfNode']) + ',' +
+                    str(app['tibcoCE']) + '\n'
+                    )
+
 
