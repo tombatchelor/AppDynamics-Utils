@@ -31,7 +31,7 @@ def lastDayMillis():
 def isPCF(node):
     for option in node['metaData']['latestVmStartupOptions']:
         if 'javaagent' in option:
-            if 'bwce' in option:
+            if 'buildpack' in option:
                 return True
             else:
                 return False
@@ -40,7 +40,7 @@ def isPCF(node):
 def isTibcoCE(node):
     for option in node['metaData']['latestVmStartupOptions']:
         if 'wrapper.tra.file' in option:
-            if 'buildpack' in option:
+            if 'bwce' in option:
                 return True
             else:
                 return False
