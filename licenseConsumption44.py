@@ -29,22 +29,25 @@ def lastDayMillis():
     return currTime - lastDay
 
 def isPCF(node):
-    for option in node['metaData']['latestVmStartupOptions']:
-        if 'javaagent' in option:
-            if 'buildpack' in option:
-                return True
-            else:
-                return False
+    if node['metaData']['latestVmStartupOptions'] is not None:
+        for option in node['metaData']['latestVmStartupOptions']:
+            if 'javaagent' in option:
+                if 'buildpack' in option:
+                    return True
+                else:
+                    return False
     return False
 
 def isTibcoCE(node):
-    for option in node['metaData']['latestVmStartupOptions']:
-        if 'wrapper.tra.file' in option:
-            if 'bwce' in option:
-                return True
-            else:
-                return False
+    if node['metaData']['latestVmStartupOptions'] is not None:
+        for option in node['metaData']['latestVmStartupOptions']:
+            if 'wrapper.tra.file' in option:
+                if 'bwce' in option:
+                    return True
+                else:
+                    return False
     return False
+
 
 def chunkNodeList(nodeList):
     if len(nodeList) < 50:
@@ -152,6 +155,10 @@ for app in apps:
 apps = newAppList
 # apps is not a list of apps with Java agent and the agent meta data
 
+# Output Json
+jsonRecord = open('json-dump.json','w')
+jsonRecord.write(json.dumps(apps))
+
 # Get the split of differnt types of Java agent
 for app in apps:
     app['fullJava'] = 0
@@ -164,10 +171,6 @@ for app in apps:
             app['tibcoCE'] += 1
         else:
             app['fullJava'] += 1
-
-# Output Json
-jsonRecord = open('json-dump.json','w')
-jsonRecord.write(json.dumps(apps))
 
 #Output CSV
 csvOutput = open('java-license.csv','w')
