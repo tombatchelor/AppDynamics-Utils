@@ -159,7 +159,7 @@ apps = newAppList
 jsonRecord = open('json-dump.json','w')
 jsonRecord.write(json.dumps(apps))
 
-# Get the split of differnt types of Java agent
+# Get the split of different types of Java agent
 for app in apps:
     app['fullJava'] = 0
     app['pcfNode'] = 0
